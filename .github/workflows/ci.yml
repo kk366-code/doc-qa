@@ -22,7 +22,7 @@ jobs:
           GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
           LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }}
           LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }}
-          LANGFUSE_BASE_URL=https://cloud.langfuse.com
+          LANGFUSE_BASE_URL=https://jp.cloud.langfuse.com
           EOF
 
       - name: Validate docker-compose config
