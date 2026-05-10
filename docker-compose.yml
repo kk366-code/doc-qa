@@ -1,0 +1,36 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ragdemo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: ./backend
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      # DATABASE_URL is set here (not in .env) because it uses the Docker service name
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ragdemo
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - app_venv:/app/.venv
+
+volumes:
+  pgdata:
+  app_venv:
