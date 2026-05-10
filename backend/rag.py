@@ -5,7 +5,6 @@ from typing import Generator, Literal, Protocol, cast
 
 import anthropic
 import psycopg2
-from psycopg2 import sql as pgsql
 import pypdf
 from fastembed import TextEmbedding
 from google import genai
@@ -17,12 +16,13 @@ from groq.types.chat import (
     ChatCompletionUserMessageParam,
 )
 from pgvector.psycopg2 import register_vector
+from psycopg2 import sql as pgsql
 from psycopg2.extras import execute_values
 
 PROVIDERS: dict[str, str] = {
     "groq": "Groq (Llama 3.3 70B)",
     "claude": "Claude (claude-sonnet-4-6)",
-    "gemini": "Gemini (gemini-2.0-flash)",
+    "gemini": "Gemini (gemini-2.5-flash)",
 }
 
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
@@ -121,7 +121,7 @@ class ClaudeProvider:
 
 
 class GeminiProvider:
-    MODEL = "gemini-2.0-flash"
+    MODEL = "gemini-2.5-flash"
 
     def __init__(self) -> None:
         project = os.environ.get("GOOGLE_CLOUD_PROJECT")
@@ -216,16 +216,12 @@ class RAGPipeline:
                 # pgcode 3D000 = invalid_catalog_name (database does not exist).
                 if attempt == 0 and getattr(exc, "pgcode", None) == "3D000":
                     try:
-                        fallback_url = urllib.parse.urlunparse(
-                            parsed._replace(path="/postgres")
-                        )
+                        fallback_url = urllib.parse.urlunparse(parsed._replace(path="/postgres"))
                         init_conn = psycopg2.connect(fallback_url)
                         init_conn.autocommit = True
                         with init_conn.cursor() as cur:
                             cur.execute(
-                                pgsql.SQL("CREATE DATABASE {}").format(
-                                    pgsql.Identifier(db_name)
-                                )
+                                pgsql.SQL("CREATE DATABASE {}").format(pgsql.Identifier(db_name))
                             )
                         init_conn.close()
                         continue  # Retry immediately, skip sleep
