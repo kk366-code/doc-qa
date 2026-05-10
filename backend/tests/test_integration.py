@@ -14,6 +14,9 @@ from pgvector.psycopg2 import register_vector
 @pytest.fixture(scope="module")
 def db_conn():
     conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    with conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    conn.commit()
     register_vector(conn)
     yield conn
     conn.close()
@@ -27,10 +30,8 @@ def test_db_connection(db_conn):
 
 def test_pgvector_extension(db_conn):
     with db_conn.cursor() as cur:
-        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
         cur.execute("SELECT extname FROM pg_extension WHERE extname = 'vector'")
         assert cur.fetchone() is not None
-    db_conn.rollback()
 
 
 def test_schema_init():
@@ -39,6 +40,9 @@ def test_schema_init():
 
     pipeline = RAGPipeline.__new__(RAGPipeline)
     pipeline.conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    with pipeline.conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    pipeline.conn.commit()
     register_vector(pipeline.conn)
     pipeline._init_schema()
     pipeline.conn.close()
