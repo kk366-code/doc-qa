@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from langfuse_client import LangfuseClient
-from rag import PROVIDERS, RAGPipeline
+from langfuse_client import LangfuseClient  # noqa: E402
+from rag import PROVIDERS, RAGPipeline  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -41,7 +41,7 @@ lf = get_lf()
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 if "messages" not in st.session_state:
-    st.session_state.messages = []       # {role, content, chunks, trace_id}
+    st.session_state.messages = []  # {role, content, chunks, trace_id}
 if "feedback_sent" not in st.session_state:
     st.session_state.feedback_sent = set()
 if "ingested_files" not in st.session_state:
@@ -68,8 +68,6 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.session_state.llm_provider = selected_provider
-    if selected_provider == "gemini":
-        st.warning("Gemini は未実装です。他のプロバイダーを選択してください。")
 
     rag = get_rag(selected_provider)
 
@@ -197,10 +195,12 @@ if query := st.chat_input("Type your question here…"):
         trace.log_generation(full_response, usage)
         trace_id = trace.id
 
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": full_response,
-        "chunks": chunks,
-        "trace_id": trace_id,
-    })
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "content": full_response,
+            "chunks": chunks,
+            "trace_id": trace_id,
+        }
+    )
     lf.flush()

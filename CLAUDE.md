@@ -35,6 +35,7 @@
   - Langfuse: https://langfuse.com/docs/sdk/python
   - Anthropic: https://docs.anthropic.com/
   - pgvector: https://github.com/pgvector/pgvector-python
+  - google-genai (Gemini): https://googleapis.github.io/python-genai/
 
 ## Docker ルール
 - **Embedding には `fastembed` を使う**（ONNX Runtime ベース、PyTorch 不要、軽量）
@@ -50,6 +51,7 @@
 - LLM: マルチプロバイダー（`LLM_PROVIDER` 環境変数で切り替え、デフォルト: `groq`）
   - `groq`: `llama-3.3-70b-versatile` via Groq SDK（無料枠あり）
   - `claude`: `claude-sonnet-4-6` via Anthropic Python SDK
+  - `gemini`: `gemini-2.0-flash` via google-genai SDK（`GEMINI_API_KEY` 必要）
   - 新プロバイダー追加: `rag.py` に `XxxProvider` クラスを追加 → `make_llm_provider()` に分岐を追加
 - Embedding: `fastembed` (BAAI/bge-small-en-v1.5, 384 次元)
 - Vector DB: pgvector (PostgreSQL) — HNSW インデックス
