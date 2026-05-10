@@ -22,7 +22,8 @@ services:
     ports:
       - "8501:8501"
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       # DATABASE_URL is set here (not in .env) because it uses the Docker service name
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/ragdemo

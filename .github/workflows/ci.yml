@@ -13,6 +13,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create .env from GitHub Secrets
+        run: |
+          cat > .env << 'EOF'
+          LLM_PROVIDER=groq
+          ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+          LANGFUSE_SECRET_KEY=${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_PUBLIC_KEY=${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_BASE_URL=https://cloud.langfuse.com
+          EOF
+
       - name: Validate docker-compose config
         run: docker compose config --quiet
 
@@ -20,10 +32,7 @@ jobs:
         run: docker compose up -d --build
 
       - name: Run integration tests
-        run: |
-          docker compose run --rm \
-            -e DATABASE_URL=postgresql://postgres:postgres@db:5432/ragdemo \
-            app uv run pytest tests/ -v
+        run: docker compose run --rm app uv run pytest tests/ -v
 
       - name: Tear down
         if: always()
