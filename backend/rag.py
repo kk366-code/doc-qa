@@ -6,6 +6,8 @@ import anthropic
 import psycopg2
 import pypdf
 from fastembed import TextEmbedding
+from google import genai
+from google.genai import types as genai_types
 from groq import Groq
 from groq.types.chat import (
     ChatCompletionMessageParam,
@@ -18,7 +20,7 @@ from psycopg2.extras import execute_values
 PROVIDERS: dict[str, str] = {
     "groq": "Groq (Llama 3.3 70B)",
     "claude": "Claude (claude-sonnet-4-6)",
-    "gemini": "Gemini (未実装)",
+    "gemini": "Gemini (gemini-2.0-flash)",
 }
 
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
@@ -108,13 +110,20 @@ class ClaudeProvider:
             yield from stream.text_stream
             if usage_out is not None:
                 final = stream.get_final_message()
-                usage_out.append({
-                    "input_tokens": final.usage.input_tokens,
-                    "output_tokens": final.usage.output_tokens,
-                })
+                usage_out.append(
+                    {
+                        "input_tokens": final.usage.input_tokens,
+                        "output_tokens": final.usage.output_tokens,
+                    }
+                )
 
 
 class GeminiProvider:
+    MODEL = "gemini-2.0-flash"
+
+    def __init__(self) -> None:
+        self._client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
     def generate_stream(
         self,
         system: str,
@@ -122,8 +131,35 @@ class GeminiProvider:
         max_tokens: int,
         usage_out: list[dict] | None,
     ) -> Generator[str, None, None]:
-        raise NotImplementedError("Gemini プロバイダーは未実装です")
-        yield  # make this a generator
+        # Gemini のロール名は "user"/"model"（"assistant" ではない）
+        contents = [
+            genai_types.Content(
+                role="user" if m["role"] == "user" else "model",
+                parts=[genai_types.Part.from_text(text=m["content"])],
+            )
+            for m in messages
+        ]
+        config = genai_types.GenerateContentConfig(
+            system_instruction=system,
+            max_output_tokens=max_tokens,
+        )
+        last_chunk = None
+        for chunk in self._client.models.generate_content_stream(
+            model=self.MODEL,
+            contents=contents,
+            config=config,
+        ):
+            if chunk.text:
+                yield chunk.text
+            last_chunk = chunk
+        # 最終チャンクに全体の usage_metadata が含まれる
+        if usage_out is not None and last_chunk and last_chunk.usage_metadata:
+            usage_out.append(
+                {
+                    "input_tokens": last_chunk.usage_metadata.prompt_token_count or 0,
+                    "output_tokens": last_chunk.usage_metadata.candidates_token_count or 0,
+                }
+            )
 
 
 def make_llm_provider(provider: str | None = None) -> LLMProvider:
@@ -208,7 +244,10 @@ class RAGPipeline:
             execute_values(
                 cur,
                 "INSERT INTO documents (filename, content, embedding, chunk_idx) VALUES %s",
-                [(filename, chunk, emb, idx) for idx, (chunk, emb) in enumerate(zip(chunks, embeddings))],
+                [
+                    (filename, chunk, emb, idx)
+                    for idx, (chunk, emb) in enumerate(zip(chunks, embeddings))
+                ],
                 template="(%s, %s, %s::vector, %s)",
             )
         self.conn.commit()
@@ -259,8 +298,7 @@ class RAGPipeline:
         usage_out: list[dict] | None = None,
     ) -> Generator[str, None, None]:
         context = "\n\n---\n\n".join(
-            f"[{filename} | relevance: {sim:.0%}]\n{content}"
-            for filename, content, sim in chunks
+            f"[{filename} | relevance: {sim:.0%}]\n{content}" for filename, content, sim in chunks
         )
         messages = [
             {

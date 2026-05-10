@@ -14,7 +14,7 @@ PDF / テキストをアップロードして自然言語で質問できる。
           RAGPipeline
           ├── Embed query (fastembed / BAAI/bge-small-en-v1.5)
           ├── pgvector HNSW 近似近傍探索 (PostgreSQL)
-          └── LLM 生成 (Groq / Claude, streaming)
+          └── LLM 生成 (Groq / Claude / Gemini, streaming)
               ↓
           Langfuse トレース (レイテンシ・トークン数・ユーザー評価)
 ```
@@ -23,7 +23,7 @@ PDF / テキストをアップロードして自然言語で質問できる。
 
 | レイヤー | 選択 | 理由 |
 |----------|------|------|
-| LLM | Groq (Llama 3.3 70B) / Claude (claude-sonnet-4-6) | UI で動的に切り替え可能。Groq は無料枠あり |
+| LLM | Groq (Llama 3.3 70B) / Claude (claude-sonnet-4-6) / Gemini (gemini-2.0-flash) | UI で動的に切り替え可能。Groq は無料枠あり |
 | ベクトルDB | pgvector (HNSW) | 既存PostgreSQLに追加するだけで運用コスト最小 |
 | Embedding | fastembed / BAAI/bge-small-en-v1.5 | ONNX ベースで PyTorch 不要・軽量・384次元 |
 | 監視 | Langfuse v4 | トレース・スコア・ダッシュボード |
@@ -46,9 +46,10 @@ PDF / テキストをアップロードして自然言語で質問できる。
 ```bash
 cp .env.example .env
 # .env を編集して使用するプロバイダーの API キーを設定:
-#   Groq 使用時  → GROQ_API_KEY
+#   Groq 使用時   → GROQ_API_KEY
 #   Claude 使用時 → ANTHROPIC_API_KEY
-# LLM_PROVIDER=groq または claude（デフォルト: groq）
+#   Gemini 使用時 → GEMINI_API_KEY
+# LLM_PROVIDER=groq または claude または gemini（デフォルト: groq）
 # 任意: LANGFUSE_* を設定するとモニタリングが有効になる
 ```
 
@@ -76,7 +77,7 @@ DATABASE_URL=postgresql://localhost/ragdemo uv run streamlit run app.py
 
 ## 使い方
 
-1. **左サイドバー**の **LLM プロバイダー** ドロップダウンで Groq / Claude を選択
+1. **左サイドバー**の **LLM プロバイダー** ドロップダウンで Groq / Claude / Gemini を選択
 2. サイドバーから PDF または `.txt` ファイルをアップロード
 3. チャット欄に質問を入力して Enter
 4. 回答の下の **「📎 Sources used」** で参照元チャンクを確認

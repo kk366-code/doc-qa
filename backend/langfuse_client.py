@@ -29,6 +29,7 @@ class LangfuseClient:
         self._lf = None
         if _langfuse_enabled():
             from langfuse import get_client
+
             self._lf = get_client()
 
     @property
