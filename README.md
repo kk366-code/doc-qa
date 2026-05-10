@@ -9,12 +9,12 @@ PDF / テキストをアップロードして自然言語で質問できる。
 ## アーキテクチャ
 
 ```
-ユーザー → Streamlit UI
+ユーザー → Streamlit UI（サイドバーでプロバイダー切り替え）
               ↓
           RAGPipeline
-          ├── Embed query (sentence-transformers / all-MiniLM-L6-v2)
+          ├── Embed query (fastembed / BAAI/bge-small-en-v1.5)
           ├── pgvector HNSW 近似近傍探索 (PostgreSQL)
-          └── Claude API 生成 (claude-sonnet-4-6, streaming)
+          └── LLM 生成 (Groq / Claude, streaming)
               ↓
           Langfuse トレース (レイテンシ・トークン数・ユーザー評価)
 ```
@@ -23,10 +23,10 @@ PDF / テキストをアップロードして自然言語で質問できる。
 
 | レイヤー | 選択 | 理由 |
 |----------|------|------|
-| LLM | `claude-sonnet-4-6` | 高品質・低コスト・ストリーミング対応 |
+| LLM | Groq (Llama 3.3 70B) / Claude (claude-sonnet-4-6) | UI で動的に切り替え可能。Groq は無料枠あり |
 | ベクトルDB | pgvector (HNSW) | 既存PostgreSQLに追加するだけで運用コスト最小 |
-| Embedding | all-MiniLM-L6-v2 | OSS・API コスト不要・384次元で RAG に十分 |
-| 監視 | Langfuse | LangCore スタックに記載。トレース・スコア・ダッシュボード |
+| Embedding | fastembed / BAAI/bge-small-en-v1.5 | ONNX ベースで PyTorch 不要・軽量・384次元 |
+| 監視 | Langfuse v4 | トレース・スコア・ダッシュボード |
 | UI | Streamlit | 1〜2日で動くデモが作れる Python ネイティブ UI |
 
 詳細な決定理由は [docs/adr-001-vector-db.md](docs/adr-001-vector-db.md) を参照。
@@ -38,14 +38,17 @@ PDF / テキストをアップロードして自然言語で質問できる。
 ### 1. 前提
 
 - Docker / Docker Compose
-- Anthropic API キー
+- Groq API キー（無料: [console.groq.com](https://console.groq.com)）または Anthropic API キー
 - （任意）Langfuse アカウント（[cloud.langfuse.com](https://cloud.langfuse.com) 無料枠あり）
 
 ### 2. 環境変数の設定
 
 ```bash
 cp .env.example .env
-# .env を編集して ANTHROPIC_API_KEY を設定
+# .env を編集して使用するプロバイダーの API キーを設定:
+#   Groq 使用時  → GROQ_API_KEY
+#   Claude 使用時 → ANTHROPIC_API_KEY
+# LLM_PROVIDER=groq または claude（デフォルト: groq）
 # 任意: LANGFUSE_* を設定するとモニタリングが有効になる
 ```
 
@@ -65,18 +68,19 @@ docker compose up --build
 # pgvector: https://github.com/pgvector/pgvector
 
 cd backend
-pip install -r requirements.txt
-DATABASE_URL=postgresql://localhost/ragdemo streamlit run app.py
+uv sync
+DATABASE_URL=postgresql://localhost/ragdemo uv run streamlit run app.py
 ```
 
 ---
 
 ## 使い方
 
-1. **左サイドバー**から PDF または `.txt` ファイルをアップロード
-2. チャット欄に質問を入力して Enter
-3. 回答の下の **「📎 Sources used」** で参照元チャンクを確認
-4. **👍/👎** で回答品質を評価 → Langfuse に記録される
+1. **左サイドバー**の **LLM プロバイダー** ドロップダウンで Groq / Claude を選択
+2. サイドバーから PDF または `.txt` ファイルをアップロード
+3. チャット欄に質問を入力して Enter
+4. 回答の下の **「📎 Sources used」** で参照元チャンクを確認
+5. **👍/👎** で回答品質を評価 → Langfuse に記録される
 
 ---
 
@@ -119,15 +123,16 @@ DATABASE_URL=postgresql://localhost/ragdemo streamlit run app.py
 
 - **Langfuse をオプショナルに**: 環境変数がなければ `_NullTrace` にフォールバックし、
   開発環境でもエラーなく動く
-- **streaming**: `client.messages.stream` + `st.write_stream` で UX を損なわない
-- **`@st.cache_resource`**: RAGPipeline・LangfuseClient を 1 回だけ初期化してメモリを節約
+- **streaming**: 各プロバイダーの streaming API + `st.empty()` で UX を損なわない
+- **`@st.cache_resource(provider)`**: プロバイダーごとに RAGPipeline をキャッシュ。切り替えても再初期化コスト最小
 
 ### スケールアップ時の移行パス
 
 | 課題 | 対策 |
 |------|------|
 | ベクトル数 1000万超 | pgvector → Qdrant（インタフェースを `retrieve()` の裏側だけ変える） |
-| Embedding の質向上 | `all-MiniLM-L6-v2` → `text-embedding-3-large` に差し替え |
+| Embedding の質向上 | `BAAI/bge-small-en-v1.5` → `BAAI/bge-large-en-v1.5` に差し替え |
+| LLM の追加 | `rag.py` に `XxxProvider` クラスを追加 → `PROVIDERS` と `make_llm_provider()` に分岐を追加 |
 | マルチユーザー認証 | Streamlit + FastAPI バックエンド分離 |
 
 ---
