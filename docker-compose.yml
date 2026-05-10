@@ -14,6 +14,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - app_net
 
   app:
     build: ./backend
@@ -30,7 +32,13 @@ services:
     volumes:
       - ./backend:/app
       - app_venv:/app/.venv
+    networks:
+      - app_net
 
 volumes:
   pgdata:
   app_venv:
+
+networks:
+  app_net:
+    driver: bridge

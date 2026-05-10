@@ -150,9 +150,18 @@ class RAGPipeline:
         self._init_schema()
 
     def _connect_db(self) -> psycopg2.extensions.connection:
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        conn.autocommit = False
-        return conn
+        import time
+
+        last_exc: Exception | None = None
+        for attempt in range(5):
+            try:
+                conn = psycopg2.connect(os.environ["DATABASE_URL"])
+                conn.autocommit = False
+                return conn
+            except psycopg2.OperationalError as exc:
+                last_exc = exc
+                time.sleep(2**attempt)
+        raise last_exc  # type: ignore[misc]
 
     def _init_schema(self) -> None:
         # Step 1: enable the extension, then register the vector type
