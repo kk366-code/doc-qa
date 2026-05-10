@@ -20,7 +20,7 @@ from psycopg2.extras import execute_values
 PROVIDERS: dict[str, str] = {
     "groq": "Groq (Llama 3.3 70B)",
     "claude": "Claude (claude-sonnet-4-6)",
-    "gemini": "Gemini (gemini-2.0-flash)",
+    "gemini": "Gemini (gemini-2.5-flash)",
 }
 
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
@@ -119,7 +119,7 @@ class ClaudeProvider:
 
 
 class GeminiProvider:
-    MODEL = "gemini-2.0-flash"
+    MODEL = "gemini-2.5-flash"
 
     def __init__(self) -> None:
         project = os.environ.get("GOOGLE_CLOUD_PROJECT")
