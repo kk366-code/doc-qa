@@ -122,7 +122,17 @@ class GeminiProvider:
     MODEL = "gemini-2.0-flash"
 
     def __init__(self) -> None:
-        self._client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if project:
+            # Vertex AI モード: Application Default Credentials で認証
+            self._client = genai.Client(
+                vertexai=True,
+                project=project,
+                location=os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1"),
+            )
+        else:
+            # AI Studio モード: GEMINI_API_KEY で認証
+            self._client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
     def generate_stream(
         self,

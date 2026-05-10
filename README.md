@@ -48,9 +48,30 @@ cp .env.example .env
 # .env を編集して使用するプロバイダーの API キーを設定:
 #   Groq 使用時   → GROQ_API_KEY
 #   Claude 使用時 → ANTHROPIC_API_KEY
-#   Gemini 使用時 → GEMINI_API_KEY
+#   Gemini 使用時 → 下記のどちらかを選択
 # LLM_PROVIDER=groq または claude または gemini（デフォルト: groq）
 # 任意: LANGFUSE_* を設定するとモニタリングが有効になる
+```
+
+#### Gemini の認証方式
+
+**AI Studio（無料枠）**
+```bash
+# GEMINI_API_KEY のみ設定（GOOGLE_CLOUD_PROJECT は不要）
+GEMINI_API_KEY=AIza...
+```
+> 無料枠のクォータが枯渇すると `429 RESOURCE_EXHAUSTED` が発生します。その場合は Vertex AI に切り替えてください。
+
+**Vertex AI（Google Cloud 課金）**
+```bash
+# 1. Google Cloud で認証
+gcloud auth application-default login
+
+# 2. .env に Google Cloud プロジェクトを設定（GEMINI_API_KEY は不要）
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=us-central1   # 省略時は us-central1
+
+# 3. Docker 内で使う場合は docker-compose.yml の ADC マウント行のコメントを外す
 ```
 
 ### 3. 起動
