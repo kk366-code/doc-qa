@@ -1,9 +1,11 @@
 import io
 import os
+import urllib.parse
 from typing import Generator, Literal, Protocol, cast
 
 import anthropic
 import psycopg2
+from psycopg2 import sql as pgsql
 import pypdf
 from fastembed import TextEmbedding
 from google import genai
@@ -198,14 +200,37 @@ class RAGPipeline:
     def _connect_db(self) -> psycopg2.extensions.connection:
         import time
 
+        url = os.environ["DATABASE_URL"]
+        parsed = urllib.parse.urlparse(url)
+        db_name = parsed.path.lstrip("/")
+
         last_exc: Exception | None = None
         for attempt in range(5):
             try:
-                conn = psycopg2.connect(os.environ["DATABASE_URL"])
+                conn = psycopg2.connect(url)
                 conn.autocommit = False
                 return conn
             except psycopg2.OperationalError as exc:
                 last_exc = exc
+                # On the first attempt, if the database doesn't exist, create it.
+                # pgcode 3D000 = invalid_catalog_name (database does not exist).
+                if attempt == 0 and getattr(exc, "pgcode", None) == "3D000":
+                    try:
+                        fallback_url = urllib.parse.urlunparse(
+                            parsed._replace(path="/postgres")
+                        )
+                        init_conn = psycopg2.connect(fallback_url)
+                        init_conn.autocommit = True
+                        with init_conn.cursor() as cur:
+                            cur.execute(
+                                pgsql.SQL("CREATE DATABASE {}").format(
+                                    pgsql.Identifier(db_name)
+                                )
+                            )
+                        init_conn.close()
+                        continue  # Retry immediately, skip sleep
+                    except Exception:
+                        pass
                 time.sleep(2**attempt)
         raise last_exc  # type: ignore[misc]
 
