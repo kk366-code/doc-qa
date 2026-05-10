@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose config
+        run: docker compose config --quiet
+
+      - name: Build and start services
+        run: docker compose up -d --build
+
+      - name: Run integration tests
+        run: |
+          docker compose run --rm \
+            -e DATABASE_URL=postgresql://postgres:postgres@db:5432/ragdemo \
+            app uv run pytest tests/ -v
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

@@ -21,7 +21,11 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
+    "pytest>=8.0.0",
     "ruff>=0.15.12",
 ]
