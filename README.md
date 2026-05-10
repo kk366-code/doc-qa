@@ -94,17 +94,33 @@ DATABASE_URL=postgresql://localhost/ragdemo uv run streamlit run app.py
 
 ---
 
+## テスト
+
+統合テストはコンテナ内で実行します（`db` サービスが起動している必要があります）。
+
+```bash
+docker compose run --rm app uv run pytest tests/ -v
+```
+
+CI（GitHub Actions）は PR ごとに自動で `docker compose up` → テスト → teardown を実行します。
+
+---
+
 ## プロジェクト構成
 
 ```
 .
-├── docker-compose.yml       # PostgreSQL + pgvector + Streamlit
+├── .github/
+│   └── workflows/
+│       └── ci.yml           # CI: docker compose lint + 統合テスト
+├── docker-compose.yml       # PostgreSQL + pgvector + Streamlit（app_net で接続）
 ├── .env.example
 ├── backend/
 │   ├── app.py               # Streamlit UI + セッション管理
 │   ├── rag.py               # RAG パイプライン（ingest / retrieve / generate）
 │   ├── langfuse_client.py   # Langfuse ラッパー（無効化可能）
-│   ├── requirements.txt
+│   ├── tests/
+│   │   └── test_integration.py  # DB 接続・スキーマ初期化の統合テスト
 │   └── Dockerfile
 └── docs/
     └── adr-001-vector-db.md # Architecture Decision Record

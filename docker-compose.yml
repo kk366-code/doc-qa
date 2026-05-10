@@ -14,13 +14,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - app_net
 
   app:
     build: ./backend
     ports:
       - "8501:8501"
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       # DATABASE_URL is set here (not in .env) because it uses the Docker service name
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/ragdemo
@@ -30,7 +33,13 @@ services:
     volumes:
       - ./backend:/app
       - app_venv:/app/.venv
+    networks:
+      - app_net
 
 volumes:
   pgdata:
   app_venv:
+
+networks:
+  app_net:
+    driver: bridge
