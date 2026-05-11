@@ -1,6 +1,7 @@
 import io
 import os
 import urllib.parse
+from dataclasses import dataclass, field
 from typing import Generator, Literal, Protocol, cast
 
 import anthropic
@@ -352,3 +353,137 @@ class RAGPipeline:
             max_tokens=1024,
             usage_out=usage_out,
         )
+
+
+# ---------------------------------------------------------------------------
+# Agent pipeline (Claude tool_use)
+# ---------------------------------------------------------------------------
+
+AGENT_SYSTEM_PROMPT = """You are an intelligent document Q&A assistant with tool access.
+
+Use the available tools to answer user questions accurately:
+- Call search_documents with a focused query to retrieve relevant document chunks
+- Call list_documents to see what documents are indexed
+- You may search multiple times with different queries to gather comprehensive information
+
+After gathering sufficient context, provide a clear, accurate answer citing source documents.
+If the retrieved context is insufficient, say so explicitly."""
+
+AGENT_TOOLS: list[dict] = [
+    {
+        "name": "search_documents",
+        "description": "インデックス済みドキュメントを意味的に検索し、関連するチャンクを返す。",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "検索クエリ"},
+                "top_k": {"type": "integer", "description": "返す最大チャンク数（デフォルト: 5）"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "list_documents",
+        "description": "インデックス済みドキュメントの一覧（ファイル名・チャンク数）を返す。",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+]
+
+
+@dataclass
+class AgentEvent:
+    type: Literal["tool_call", "tool_result", "text_delta", "done"]
+    data: dict = field(default_factory=dict)
+
+
+class AgentPipeline:
+    """Multi-step reasoning agent using Claude tool_use. Uses RAGPipeline for DB access."""
+
+    _MAX_STEPS = 8
+
+    def __init__(self, rag: RAGPipeline) -> None:
+        self._rag = rag
+        self._client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    def _execute_tool(self, name: str, inputs: dict) -> dict:
+        if name == "search_documents":
+            query = inputs.get("query", "")
+            top_k = int(inputs.get("top_k", 5))
+            chunks = self._rag.retrieve(query, top_k=top_k)
+            text = (
+                "\n\n".join(
+                    f"[{fname} | relevance: {sim:.0%}]\n{content}" for fname, content, sim in chunks
+                )
+                or "No relevant documents found."
+            )
+            return {"text": text, "chunks": chunks}
+        if name == "list_documents":
+            docs = self._rag.list_documents()
+            text = (
+                "\n".join(f"- {fname} ({n} chunks)" for fname, n in docs) or "No documents indexed."
+            )
+            return {"text": text, "chunks": []}
+        return {"text": f"Unknown tool: {name}", "chunks": []}
+
+    def run_stream(
+        self,
+        query: str,
+        usage_out: list[dict] | None = None,
+    ) -> Generator[AgentEvent, None, None]:
+        messages: list[dict] = [{"role": "user", "content": query}]
+        total_input = total_output = 0
+
+        for _ in range(self._MAX_STEPS):
+            response = self._client.messages.create(
+                model=ClaudeProvider.MODEL,
+                max_tokens=4096,
+                system=AGENT_SYSTEM_PROMPT,
+                tools=AGENT_TOOLS,  # type: ignore[arg-type]
+                messages=messages,  # type: ignore[arg-type]
+            )
+            total_input += response.usage.input_tokens
+            total_output += response.usage.output_tokens
+            messages.append({"role": "assistant", "content": response.content})  # type: ignore[arg-type]
+
+            if response.stop_reason == "end_turn":
+                text = "".join(
+                    block.text  # type: ignore[union-attr]
+                    for block in response.content
+                    if block.type == "text"
+                )
+                # Yield word-by-word for a streaming feel
+                words = text.split(" ")
+                for i, word in enumerate(words):
+                    yield AgentEvent(
+                        type="text_delta",
+                        data={"delta": word if i == len(words) - 1 else word + " "},
+                    )
+                break
+
+            if response.stop_reason == "tool_use":
+                tool_results = []
+                for block in response.content:
+                    if block.type != "tool_use":
+                        continue
+                    yield AgentEvent(
+                        type="tool_call",
+                        data={"tool": block.name, "input": block.input, "id": block.id},
+                    )
+                    result = self._execute_tool(block.name, block.input)  # type: ignore[arg-type]
+                    yield AgentEvent(
+                        type="tool_result",
+                        data={
+                            "tool": block.name,
+                            "id": block.id,
+                            "result": result["text"],
+                            "chunks": result["chunks"],
+                        },
+                    )
+                    tool_results.append(
+                        {"type": "tool_result", "tool_use_id": block.id, "content": result["text"]}
+                    )
+                messages.append({"role": "user", "content": tool_results})  # type: ignore[arg-type]
+
+        if usage_out is not None:
+            usage_out.append({"input_tokens": total_input, "output_tokens": total_output})
+        yield AgentEvent(type="done", data={})
