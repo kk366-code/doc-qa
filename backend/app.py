@@ -110,8 +110,14 @@ with st.sidebar:
             if key not in st.session_state.ingested_files:
                 with st.spinner(f"Ingesting {f.name}…"):
                     n = rag.ingest(f.name, f.read())
-                st.session_state.ingested_files.add(key)
-                st.success(f"{f.name}: {n} chunks indexed")
+                if n == 0:
+                    st.error(
+                        f"{f.name}: テキストを抽出できませんでした。"
+                        "画像PDFの場合はOCR済みのPDFをご利用ください。"
+                    )
+                else:
+                    st.session_state.ingested_files.add(key)
+                    st.success(f"{f.name}: {n} chunks indexed")
 
     st.divider()
     st.subheader("Indexed documents")
