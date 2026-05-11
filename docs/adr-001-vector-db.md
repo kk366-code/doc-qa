@@ -13,7 +13,7 @@
 専用ベクトルデータベース（Pinecone, Qdrant, Weaviate）か、
 既存の PostgreSQL 拡張（pgvector）かを選定する必要があった。
 
-LangCore 社の既存インフラは PostgreSQL を採用している。
+本システムは既存の PostgreSQL 環境への統合を前提として設計する。
 
 ---
 
@@ -37,7 +37,7 @@ LangCore 社の既存インフラは PostgreSQL を採用している。
 ## 理由
 
 ### 1. 既存インフラとの統合コスト
-LangCore の本番環境は PostgreSQL を既に運用している。
+PostgreSQL を既に本番運用していることを前提とすれば、
 pgvector を追加するだけで済み、新たなデータストアの運用・監視コストが発生しない。
 
 ### 2. ACID 特性を活かせる
