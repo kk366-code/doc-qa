@@ -86,6 +86,7 @@
 # 初回セットアップ
 cp .env.example .env        # APIキーを記入
 uv sync                     # 依存インストール
+uv run pre-commit install   # gitleaks pre-commit hook を登録
 
 # ローカル実行（PostgreSQL + pgvector が別途必要）
 uv run streamlit run backend/app.py
