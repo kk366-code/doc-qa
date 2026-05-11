@@ -279,6 +279,8 @@ class RAGPipeline:
     def ingest(self, filename: str, file_bytes: bytes) -> int:
         text = self.extract_text(file_bytes, filename)
         chunks = self._chunk(text)
+        if not chunks:
+            return 0
         embeddings = [emb.tolist() for emb in self.embedder.embed(chunks)]
 
         with self.conn.cursor() as cur:
