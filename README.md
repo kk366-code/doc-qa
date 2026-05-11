@@ -134,6 +134,22 @@ DATABASE_URL=postgresql://localhost/ragdemo uv run streamlit run app.py
 
 ---
 
+## セキュリティ
+
+[gitleaks](https://github.com/gitleaks/gitleaks) による pre-commit hook でシークレットの誤コミットを防止している。
+
+```bash
+# hook 登録（初回のみ）
+uv run pre-commit install
+
+# 手動スキャン
+uv run pre-commit run --all-files
+```
+
+`.gitleaks.toml` で `.env.example` 内のダミー値を除外設定済み。
+
+---
+
 ## テスト
 
 統合テストはコンテナ内で実行します（`db` サービスが起動している必要があります）。
