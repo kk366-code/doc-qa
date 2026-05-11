@@ -121,6 +121,21 @@ class _TraceHandle:
         with self._lf.start_as_current_observation(**kwargs):
             pass
 
+    def log_agent_step(
+        self,
+        step: int,
+        tool_name: str,
+        tool_input: dict,
+        result_chunks: int,
+    ) -> None:
+        with self._lf.start_as_current_observation(
+            as_type="span",
+            name=f"agent-step-{step}",
+            input={"tool": tool_name, "input": tool_input},
+            output={"result_chunks": result_chunks},
+        ):
+            pass
+
 
 class _NullTrace:
     """Returned when Langfuse is disabled; silently absorbs all calls."""
@@ -131,4 +146,7 @@ class _NullTrace:
         pass
 
     def log_generation(self, *_: object, **__: object) -> None:
+        pass
+
+    def log_agent_step(self, *_: object, **__: object) -> None:
         pass

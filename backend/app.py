@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langfuse_client import LangfuseClient  # noqa: E402
-from rag import PROVIDERS, RAGPipeline  # noqa: E402
+from rag import PROVIDERS, AgentPipeline, RAGPipeline  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -32,6 +32,11 @@ def get_rag(provider: str) -> RAGPipeline:
 
 
 @st.cache_resource(show_spinner=False)
+def get_agent_pipeline(provider: str) -> AgentPipeline:
+    return AgentPipeline(get_rag(provider))
+
+
+@st.cache_resource(show_spinner=False)
 def get_lf() -> LangfuseClient:
     return LangfuseClient()
 
@@ -48,6 +53,8 @@ if "ingested_files" not in st.session_state:
     st.session_state.ingested_files = set()  # (name, size) already processed
 if "llm_provider" not in st.session_state:
     st.session_state.llm_provider = os.environ.get("LLM_PROVIDER", "groq")
+if "app_mode" not in st.session_state:
+    st.session_state.app_mode = "rag"
 
 # ---------------------------------------------------------------------------
 # Sidebar – document management
@@ -58,16 +65,32 @@ with st.sidebar:
     st.caption("Enterprise document Q&A powered by pgvector")
 
     st.divider()
-    st.subheader("LLM プロバイダー")
-    provider_keys = list(PROVIDERS.keys())
-    selected_provider = st.selectbox(
-        "LLM プロバイダー",
-        options=provider_keys,
-        format_func=lambda k: PROVIDERS[k],
-        index=provider_keys.index(st.session_state.llm_provider),
+    st.subheader("モード")
+    app_mode = st.radio(
+        "モード",
+        options=["rag", "agent"],
+        format_func=lambda m: (
+            "RAGモード（マルチプロバイダー）" if m == "rag" else "エージェントモード（Claude専用）"
+        ),
+        key="app_mode",  # Streamlit が session_state.app_mode を自動同期
         label_visibility="collapsed",
     )
-    st.session_state.llm_provider = selected_provider
+
+    st.divider()
+    st.subheader("LLM プロバイダー")
+    if app_mode == "agent":
+        st.info("エージェントモードは Claude (tool_use) 固定です")
+        selected_provider = "claude"
+    else:
+        provider_keys = list(PROVIDERS.keys())
+        selected_provider = st.selectbox(
+            "LLM プロバイダー",
+            options=provider_keys,
+            format_func=lambda k: PROVIDERS[k],
+            index=provider_keys.index(st.session_state.llm_provider),
+            label_visibility="collapsed",
+        )
+        st.session_state.llm_provider = selected_provider
 
     rag = get_rag(selected_provider)
 
@@ -159,40 +182,113 @@ if query := st.chat_input("Type your question here…"):
     full_response = ""
     chunks: list = []
     trace_id = "no-trace"
+    usage_out: list[dict] = []
 
     with lf.trace(query=query, session_id=st.session_state.session_id) as trace:
-        # Retrieval
-        with st.spinner("Searching documents…"):
-            chunks = rag.retrieve(query, top_k=5)
-            trace.log_retrieval(query, chunks)
+        if app_mode == "agent":
+            # ----------------------------------------------------------------
+            # Agent mode: Claude tool_use loop
+            # ----------------------------------------------------------------
+            agent = get_agent_pipeline(selected_provider)
+            with st.chat_message("assistant"):
+                steps_container = st.container()
+                text_placeholder = st.empty()
+                current_expander = None
+                step_idx = 0
 
-        # Streaming generation
-        usage_out: list[dict] = []
-        with st.chat_message("assistant"):
-            placeholder = st.empty()
-            for token in rag.generate_stream(query, chunks, usage_out=usage_out):
-                full_response += token
-                placeholder.markdown(full_response + "▌")
-            placeholder.markdown(full_response)
+                for event in agent.run_stream(query, usage_out=usage_out):
+                    if event.type == "tool_call":
+                        step_idx += 1
+                        tool = event.data["tool"]
+                        inp = event.data["input"]
+                        label = (
+                            f"🔍 検索: {inp.get('query', '')}"
+                            if tool == "search_documents"
+                            else "📋 ドキュメント一覧を取得"
+                        )
+                        with steps_container:
+                            current_expander = st.expander(label, expanded=False)
 
-            if chunks:
-                with st.expander("📎 Sources used", expanded=True):
-                    for filename, content, sim in chunks:
-                        st.markdown(f"**{filename}** – relevance `{sim:.0%}`\n\n> {content[:300]}…")
+                    elif event.type == "tool_result":
+                        result_chunks: list = event.data.get("chunks", [])
+                        chunks.extend(result_chunks)
+                        trace.log_agent_step(
+                            step=step_idx,
+                            tool_name=event.data["tool"],
+                            tool_input={},
+                            result_chunks=len(result_chunks),
+                        )
+                        if current_expander is not None:
+                            with current_expander:
+                                if result_chunks:
+                                    for fname, content, sim in result_chunks[:3]:
+                                        st.markdown(
+                                            f"**{fname}** – `{sim:.0%}`\n\n> {content[:200]}…"
+                                        )
+                                else:
+                                    st.text(event.data.get("result", "")[:300])
 
-            col_up, col_dn, _ = st.columns([1, 1, 8])
-            if col_up.button("👍", key="up_new"):
-                lf.send_feedback(trace.id, 1.0, "thumbs up")
-                st.session_state.feedback_sent.add(trace.id)
-                st.toast("Thanks!", icon="👍")
-            if col_dn.button("👎", key="dn_new"):
-                lf.send_feedback(trace.id, 0.0, "thumbs down")
-                st.session_state.feedback_sent.add(trace.id)
-                st.toast("Thanks for the feedback.", icon="📝")
+                    elif event.type == "text_delta":
+                        full_response += event.data["delta"]
+                        text_placeholder.markdown(full_response + "▌")
 
-        # Log generation after stream completes (still inside trace context)
-        usage = usage_out[0] if usage_out else None
-        trace.log_generation(full_response, usage)
+                text_placeholder.markdown(full_response)
+
+                if chunks:
+                    with st.expander("📎 参照したソース", expanded=False):
+                        for fname, content, sim in chunks:
+                            st.markdown(
+                                f"**{fname}** – relevance `{sim:.0%}`\n\n> {content[:300]}…"
+                            )
+
+                col_up, col_dn, _ = st.columns([1, 1, 8])
+                if col_up.button("👍", key="up_new"):
+                    lf.send_feedback(trace.id, 1.0, "thumbs up")
+                    st.session_state.feedback_sent.add(trace.id)
+                    st.toast("Thanks!", icon="👍")
+                if col_dn.button("👎", key="dn_new"):
+                    lf.send_feedback(trace.id, 0.0, "thumbs down")
+                    st.session_state.feedback_sent.add(trace.id)
+                    st.toast("Thanks for the feedback.", icon="📝")
+
+            usage = usage_out[0] if usage_out else None
+            trace.log_generation(full_response, usage)
+
+        else:
+            # ----------------------------------------------------------------
+            # RAG mode: single-shot retrieve → generate
+            # ----------------------------------------------------------------
+            with st.spinner("Searching documents…"):
+                chunks = rag.retrieve(query, top_k=5)
+                trace.log_retrieval(query, chunks)
+
+            with st.chat_message("assistant"):
+                placeholder = st.empty()
+                for token in rag.generate_stream(query, chunks, usage_out=usage_out):
+                    full_response += token
+                    placeholder.markdown(full_response + "▌")
+                placeholder.markdown(full_response)
+
+                if chunks:
+                    with st.expander("📎 Sources used", expanded=True):
+                        for filename, content, sim in chunks:
+                            st.markdown(
+                                f"**{filename}** – relevance `{sim:.0%}`\n\n> {content[:300]}…"
+                            )
+
+                col_up, col_dn, _ = st.columns([1, 1, 8])
+                if col_up.button("👍", key="up_new"):
+                    lf.send_feedback(trace.id, 1.0, "thumbs up")
+                    st.session_state.feedback_sent.add(trace.id)
+                    st.toast("Thanks!", icon="👍")
+                if col_dn.button("👎", key="dn_new"):
+                    lf.send_feedback(trace.id, 0.0, "thumbs down")
+                    st.session_state.feedback_sent.add(trace.id)
+                    st.toast("Thanks for the feedback.", icon="📝")
+
+            usage = usage_out[0] if usage_out else None
+            trace.log_generation(full_response, usage)
+
         trace_id = trace.id
 
     st.session_state.messages.append(
