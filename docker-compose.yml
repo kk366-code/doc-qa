@@ -34,7 +34,7 @@ services:
       - ./backend:/app
       - app_venv:/app/.venv
       # Vertex AI を Docker 内で使う場合: 下記を有効化（事前に gcloud auth application-default login を実行）
-      # - ${HOME}/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
     networks:
       - app_net
 
