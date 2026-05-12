@@ -32,7 +32,7 @@ PDF / テキストをアップロードして自然言語で質問できる。
 
 | レイヤー | 選択 | 理由 |
 |----------|------|------|
-| LLM | Groq (Llama 3.3 70B) / Claude (claude-sonnet-4-6) / Gemini (gemini-2.0-flash) | UI で動的に切り替え可能。Groq は無料枠あり |
+| LLM | Groq (Llama 3.3 70B) / Claude (claude-sonnet-4-6) / Gemini (gemini-2.5-flash) | UI で動的に切り替え可能。Groq は無料枠あり |
 | ベクトルDB | pgvector (HNSW) | 既存PostgreSQLに追加するだけで運用コスト最小 |
 | Embedding | fastembed / BAAI/bge-small-en-v1.5 | ONNX ベースで PyTorch 不要・軽量・384次元 |
 | 監視 | Langfuse v4 | トレース・スコア・ダッシュボード |
