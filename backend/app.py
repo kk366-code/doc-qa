@@ -108,13 +108,10 @@ with st.sidebar:
         for f in uploaded:
             key = (f.name, f.size)
             if key not in st.session_state.ingested_files:
-                with st.spinner(f"Ingesting {f.name}…"):
+                with st.spinner(f"{f.name} を処理中（スキャンPDFの場合 OCR が実行されます）…"):
                     n = rag.ingest(f.name, f.read())
                 if n == 0:
-                    st.error(
-                        f"{f.name}: テキストを抽出できませんでした。"
-                        "画像PDFの場合はOCR済みのPDFをご利用ください。"
-                    )
+                    st.error(f"{f.name}: テキストを抽出できませんでした。")
                 else:
                     st.session_state.ingested_files.add(key)
                     st.success(f"{f.name}: {n} chunks indexed")

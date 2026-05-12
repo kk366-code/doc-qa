@@ -9,6 +9,8 @@ dependencies = [
     "pgvector>=0.3.2",
     "fastembed>=0.4.0",
     "pypdf>=4.0.0",
+    "pypdfium2>=4.0.0",
+    "ndlocr-lite @ git+https://github.com/ndl-lab/ndlocr-lite",
     "langfuse>=4.0.0",
     "python-dotenv>=1.0.0",
     "groq>=0.9.0",

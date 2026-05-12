@@ -2,6 +2,7 @@
 
 社内ドキュメント Q&A システムのデモ。
 PDF / テキストをアップロードして自然言語で質問できる。
+スキャン済み日本語 PDF は ndlocr-lite（国立国会図書館製）で自動 OCR 処理される。
 回答には参照元チャンクが表示され、👍/👎 フィードバックは Langfuse に記録される。
 
 ---
@@ -35,6 +36,7 @@ PDF / テキストをアップロードして自然言語で質問できる。
 | LLM | Groq (Llama 3.3 70B) / Claude (claude-sonnet-4-6) / Gemini (gemini-2.5-flash) | UI で動的に切り替え可能。Groq は無料枠あり |
 | ベクトルDB | pgvector (HNSW) | 既存PostgreSQLに追加するだけで運用コスト最小 |
 | Embedding | fastembed / BAAI/bge-small-en-v1.5 | ONNX ベースで PyTorch 不要・軽量・384次元 |
+| OCR | ndlocr-lite（国立国会図書館） | 日本語スキャン PDF に特化・ONNX ベース・GPU 不要 |
 | 監視 | Langfuse v4 | トレース・スコア・ダッシュボード |
 | UI | Streamlit | 1〜2日で動くデモが作れる Python ネイティブ UI |
 
@@ -111,7 +113,7 @@ DATABASE_URL=postgresql://localhost/ragdemo uv run streamlit run app.py
 
 1. **左サイドバー**の **モード** で「RAGモード」を選択
 2. **LLM プロバイダー** ドロップダウンで Groq / Claude / Gemini を選択
-3. サイドバーから PDF または `.txt` ファイルをアップロード
+3. サイドバーから PDF または `.txt` ファイルをアップロード（スキャン済み日本語 PDF は自動で OCR 処理）
 4. チャット欄に質問を入力して Enter
 5. 回答の下の **「📎 Sources used」** で参照元チャンクを確認
 6. **👍/👎** で回答品質を評価 → Langfuse に記録される
