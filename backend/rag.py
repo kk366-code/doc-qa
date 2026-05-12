@@ -1,7 +1,10 @@
+import argparse
 import io
 import os
+import tempfile
 import urllib.parse
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Generator, Literal, Protocol, cast
 
 import anthropic
@@ -261,10 +264,75 @@ class RAGPipeline:
     # Ingestion
     # -------------------------------------------------------------------------
 
+    def _ocr_pdf(self, file_bytes: bytes) -> str:
+        """pypdf でテキスト抽出できなかった画像 PDF を ndlocr-lite で OCR 処理する。"""
+        import ocr as ndlocr
+        import pypdfium2 as pdfium
+
+        base_dir = Path(ndlocr.__file__).resolve().parent
+        args_template = argparse.Namespace(
+            sourcedir=None,
+            viz=False,
+            device="cpu",
+            det_weights=str(base_dir / "model" / "deim-s-1024x1024.onnx"),
+            det_classes=str(base_dir / "config" / "ndl.yaml"),
+            det_score_threshold=0.2,
+            det_conf_threshold=0.25,
+            det_iou_threshold=0.2,
+            simple_mode=False,
+            rec_weights30=str(
+                base_dir / "model" / "parseq-ndl-24x256-30-tiny-189epoch-tegaki3-r8data-202604.onnx"
+            ),
+            rec_weights50=str(
+                base_dir / "model" / "parseq-ndl-24x384-50-tiny-300epoch-tegaki3-r8data-202604.onnx"
+            ),
+            rec_weights=str(
+                base_dir
+                / "model"
+                / "parseq-ndl-24x768-100-tiny-153epoch-tegaki3-r8data-202604.onnx"
+            ),
+            rec_classes=str(base_dir / "config" / "NDLmoji.yaml"),
+            enable_tcy=False,
+            json_only=False,
+        )
+
+        pdf = pdfium.PdfDocument(file_bytes)
+        texts: list[str] = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            img_dir = Path(tmpdir) / "imgs"
+            out_dir = Path(tmpdir) / "out"
+            img_dir.mkdir()
+            out_dir.mkdir()
+
+            for i, page in enumerate(pdf):
+                bitmap = page.render(scale=2.0)
+                img_path = img_dir / f"page_{i:04d}.png"
+                bitmap.to_pil().save(str(img_path))
+
+                page_out = out_dir / f"page_{i:04d}"
+                page_out.mkdir()
+
+                page_args = argparse.Namespace(
+                    **vars(args_template),
+                    sourceimg=str(img_path),
+                    output=str(page_out),
+                )
+                ndlocr.process(page_args)
+
+                txt_path = page_out / f"page_{i:04d}.txt"
+                if txt_path.exists():
+                    texts.append(txt_path.read_text(encoding="utf-8"))
+
+        return "\n".join(texts)
+
     def extract_text(self, file_bytes: bytes, filename: str) -> str:
         if filename.lower().endswith(".pdf"):
             reader = pypdf.PdfReader(io.BytesIO(file_bytes))
-            return "\n".join(page.extract_text() or "" for page in reader.pages)
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+            if len(text.strip()) < 50:
+                text = self._ocr_pdf(file_bytes)
+            return text
         return file_bytes.decode("utf-8", errors="replace")
 
     def _chunk(self, text: str) -> list[str]:
