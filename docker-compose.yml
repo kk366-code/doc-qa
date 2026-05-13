@@ -32,7 +32,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-      - app_venv:/app/.venv
+      # app_venv 削除: /venv はイメージレイヤー内に存在し、ホストマウントに上書きされない
       # Vertex AI を Docker 内で使う場合: 下記を有効化（事前に gcloud auth application-default login を実行）
       - ${HOME}/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
     networks:
@@ -40,7 +40,6 @@ services:
 
 volumes:
   pgdata:
-  app_venv:
 
 networks:
   app_net:

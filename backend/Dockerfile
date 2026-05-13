@@ -12,9 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies via uv (creates uv.lock if not present)
-COPY pyproject.toml uv.lock* ./
-RUN uv sync --no-dev --no-install-project
+# /venv はイメージレイヤーに含め、ホストマウント（./backend:/app）に上書きされないようにする
+ENV UV_PROJECT_ENVIRONMENT=/venv
+
+# Install dependencies via uv using lockfile for reproducibility
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # Pre-download the fastembed model so the container starts fast
 RUN uv run python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
