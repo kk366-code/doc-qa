@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from google.genai import errors as genai_errors  # noqa: E402
 from langfuse_client import LangfuseClient  # noqa: E402
 from rag import PROVIDERS, AgentPipeline, RAGPipeline  # noqa: E402
 
@@ -109,7 +110,14 @@ with st.sidebar:
             key = (f.name, f.size)
             if key not in st.session_state.ingested_files:
                 with st.spinner(f"{f.name} を処理中（スキャンPDFの場合 OCR が実行されます）…"):
-                    n = rag.ingest(f.name, f.read())
+                    try:
+                        n = rag.ingest(f.name, f.read())
+                    except genai_errors.ServerError:
+                        st.error(
+                            f"{f.name}: Gemini API が混雑しています。"
+                            "しばらく待ってから再度お試しください。"
+                        )
+                        continue
                 if n == 0:
                     st.error(f"{f.name}: テキストを抽出できませんでした。")
                 else:
