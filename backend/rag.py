@@ -12,7 +12,6 @@ import psycopg2
 import pypdf
 from fastembed import TextEmbedding
 from google import genai
-from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 from groq import Groq
 from groq.types.chat import (
