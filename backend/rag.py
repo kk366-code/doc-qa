@@ -140,6 +140,23 @@ class GeminiProvider:
             # AI Studio モード: GEMINI_API_KEY で認証
             self._client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
+    def extract_pdf_text(self, file_bytes: bytes) -> str:
+        """Gemini マルチモーダルで PDF からテキストを抽出する。
+
+        Part.from_bytes（インライン）を使うため Vertex AI・AI Studio 両モードで動作する。
+        """
+        response = self._client.models.generate_content(
+            model=self.MODEL,
+            contents=[
+                genai_types.Part.from_bytes(
+                    data=file_bytes,
+                    mime_type="application/pdf",
+                ),
+                "このPDFに含まれるすべてのテキストを、レイアウトを保ちながらそのまま抽出してください。解説や要約は不要です。",
+            ],
+        )
+        return response.text or ""
+
     def generate_stream(
         self,
         system: str,
@@ -328,6 +345,9 @@ class RAGPipeline:
 
     def extract_text(self, file_bytes: bytes, filename: str) -> str:
         if filename.lower().endswith(".pdf"):
+            # Gemini プロバイダー選択時はマルチモーダルで直接抽出（OCR 不要）
+            if isinstance(self.llm, GeminiProvider):
+                return self.llm.extract_pdf_text(file_bytes)
             reader = pypdf.PdfReader(io.BytesIO(file_bytes))
             text = "\n".join(page.extract_text() or "" for page in reader.pages)
             if len(text.strip()) < 50:
